@@ -1,0 +1,32 @@
+terminator String "" ;
+separator String ";" ;
+
+terminator Integer "" ;
+separator Integer ";" ;
+
+terminator ReleaseBlock "" ;
+separator ReleaseBlock ";" ;
+
+terminator TrackBlock "" ;
+separator TrackBlock ";" ;
+
+
+PTrack . TrackBlock ::= "track" "{"
+                        "title" "=" String ","
+		        "location" "=" String ","
+		        "artists" "=" [String] ","
+		        "bpm" "=" Integer ","
+		        "duration" "=" Integer ","
+		        "cues" "=" [Integer] ","
+		        "genre" "=" String "}" ;
+
+PRelease . ReleaseBlock ::= "release" "{"
+	  	            "title" "=" String ","
+			    "year" "=" Integer ","
+			    "label" "=" String ","
+			    "tracks" "=" [String] "}" ;
+
+PCrate . CrateBlock ::= "crate" "{"
+       		        "title" "=" String ","
+            	        "tracks" "=" [TrackBlock] ","
+		        "releases" "=" [ReleaseBlock] "}" ;
