@@ -43,20 +43,6 @@ instance Img Int where
   img = img . show         
 
 
--- probably better to do [Track] -> Image, for filter searches.  
-trackList :: Int -> Int -> Release -> Image
-trackList height width x = resize width height $ vlist (map listing (tracks x))
-
-                             
-
--- argh which order? will presently break on empty artist lists
-listing :: Track -> String
-listing x = (foldr1 (\x y -> x ++ " & " ++ y) (artists x)) ++ " - " ++ (title x)
-          
--- do we really ever want to pad the height? Could get rid of a parameter        
-releaseBox :: Int -> Int -> Release -> Image
-releaseBox height width x = box $ resize width height $ 
-                              img (name x) <-> img (label x) <-> img (show (year x))
                               
 -- could easily change to resize height
 trackBox :: Int -> Track -> Image
