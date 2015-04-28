@@ -1,6 +1,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 module Screen where
 
+-- Fun fact: C-i, C-m, and probably many others are taken by unix for some reason.
+       
 import Graphics.Vty
 import qualified Data.Map as Map
 import Rendering -- for the help screen        

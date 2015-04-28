@@ -26,6 +26,21 @@ alt (EvKey k mods) = EvKey k (MAlt : mods)
 shift :: Event -> Event
 shift (EvKey k mods) = EvKey k (MShift : mods)      
 
+up :: Event
+up = EvKey KUp []
+
+down :: Event
+down = EvKey KDown []     
+
+kright :: Event
+kright = EvKey KRight []
+
+kleft :: Event
+kleft = EvKey KLeft []
+
+enter :: Event
+enter = EvKey KEnter []
+
 --------------------      
 -- Drawing Images --
 --------------------

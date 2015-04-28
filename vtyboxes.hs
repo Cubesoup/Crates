@@ -4,7 +4,8 @@
 import Graphics.Vty
 import Screen
 import Rendering       
-
+import Import
+import System.Directory (getCurrentDirectory)       
 
 main = do
      config <- standardIOConfig
@@ -21,12 +22,17 @@ splashScreen = Screen { renderer = (\_ -> picForImage splashImage)
                       , eventMap = splashEventMap }
 
 splashEventMap vty = toMap [ (ctrl (chEvent 'q') , Terminate)
-                                  , (ctrl (chEvent 's') , Transition { before = (\_ -> return "")
-                                                                     , after  = (\_ _ -> return ())
-                                                                     , subScreen = searchScreen })
-                                  , ((chEvent '?')      , displayHelp splashHelp)
-                                  ]
-                         
+{-                           , (ctrl (chEvent 'm') , Transition { before = (\_ -> importSetup)
+                                                              , after  = (\a b -> return ())
+                                                              , subScreen = directoryBrowser }) -}
+                           , (ctrl (chEvent 'i') , displayHelp importHelp)
+                           , (ctrl (chEvent 's') , Transition { before = (\_ -> return "")
+                                                              , after  = (\_ _ -> return ())
+                                                              , subScreen = searchScreen }) 
+                           
+                           , ((chEvent '?')      , displayHelp splashHelp)
+                           ]
+
                
 splashImage :: Image 
 splashImage = img "Welcome to" <->
@@ -56,11 +62,11 @@ searchScreen = Screen { renderer = (\text -> picForImage (box (resize 30 1 (img 
                                                                                          -- need a CURSOR -- Vty.Output has cursor things.
 
 searchEventMap vty = toMap $ [ (ctrl (chEvent 'q') , Terminate)
-                                    , (chEvent '?'        , displayHelp searchHelp)
-                                    , (backspace          , Update (apply safeInit))
-                                    , (ctrl (chEvent 'k') , Update (\_ -> return ""))
-                                    , (meta backspace     , Update (apply (unwords . safeInit . words)))
-                                    ] ++ alphabetEvents
+                             , (chEvent '?'        , displayHelp searchHelp)
+                             , (backspace          , Update (apply safeInit))
+                             , (ctrl (chEvent 'k') , Update (\_ -> return ""))
+                             , (meta backspace     , Update (apply (unwords . safeInit . words)))
+                             ] ++ alphabetEvents
 
 safeInit :: [a] -> [a]
 safeInit [] = []
@@ -85,7 +91,7 @@ searchHelp = vlist [ "Search screen help page. Type ? to return to the search sc
                    , ""
                    , "Other Commands:"
                    , "  ?           - show this help page"
-                   , "  C-q         - quit to the splash" ]
+                   , "  C-q         - quit to the splash screen" ]
 
 
 -----------------------           

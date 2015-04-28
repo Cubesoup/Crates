@@ -6,6 +6,9 @@ import Data.ByteString.Char8 (pack)
 import Data.ByteString (ByteString)
 import Data.Monoid
 import Data.Char (toLower)
+
+-- Think About: Add synonyms for artists, labels, genres. For example "UK Hardcore"
+-- could be a synonym for "Happy Hardcore". "DnB", "Drum and Bass", "Drum 'n' Bass", etc.   
        
 ----------------------
 -- Type Definitions --
@@ -31,7 +34,10 @@ data Crate = Crate { trackIndex   :: Trie Track
                    , genreIndex   :: Trie String
                    , releaseLookupTable :: Trie [Release] }
 
-
+-----------------------------     
+-- Call This After Parsing --
+-----------------------------   
+     
 buildCrate :: [Track] -> [Release] -> Crate
 buildCrate tcks releases = Crate { trackIndex = fromList $ zip trackKeys tcks      -- might need unique keys for tracks with same name.
                                  , releaseIndex = fromList $ zip releaseKeys releases -- might need unique keys for releases with same name.
@@ -47,7 +53,10 @@ buildCrate tcks releases = Crate { trackIndex = fromList $ zip trackKeys tcks   
     releaseKeys = map (toKey . name) releases
     stringTrie strings = fromList $ zip (map toKey strings) strings
 
-  
+
+------------------------  
+-- For Building Tries --
+------------------------     
   
 class Keyable a where
   toKey :: a -> ByteString
@@ -64,7 +73,9 @@ instance Keyable Release where -- as with tracks, we want unique keys for releas
 trackKey :: String -> [String] -> ByteString
 trackKey title artists = pack $ (map toLower title) ++ "--" ++ (concat artists)
 
-
+----------------------------         
+-- For Looking For Things --
+----------------------------            
          
 matchTitle :: Crate -> String -> [Track]
 matchTitle c x = map snd $ toList (submap (toKey x) (trackIndex c))
@@ -87,10 +98,6 @@ instance Monoid TrackFilter where
   mempty = const True
   mappend a b = (\x -> (a x) && (b x))
 
--- might be good to have synonyms? should that be done at load?
--- should we normalize artist names according to crate synonyms
--- when loading crates?   
-   
 filterArtist :: String -> TrackFilter
 filterArtist a = (\t -> (map toLower a) `elem` (map (map toLower) (artists t)))
 
@@ -122,8 +129,11 @@ findTracks c r = map (\(Just x) -> x) $ filter something $
     something x = case x of
                    Nothing -> False
                    _       -> True
-             
 
+-----------------------
+-- For Adding Things --  
+-----------------------
+        
 addTrack :: Crate -> Track -> Crate -- also have to regenerate the artist, genre indices if new ones added.
 addTrack c t = c { trackIndex = insert (toKey t) t (trackIndex c)
                  , artistIndex = foldr (\a x -> insert (toKey a) a x) (artistIndex c) (artists t)
@@ -148,3 +158,4 @@ addRelease c r = c { releaseIndex = insert (toKey r) r (releaseIndex c)
                      
      
         
+
