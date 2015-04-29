@@ -1,0 +1,18 @@
+
+Track . TrackRep ::= "track" "{"
+                     "title" "=" String ","
+		     "location" "=" String ","
+		     "artists" "=" [String] ","
+		     "bpm" "=" Integer ","
+		     "duration" "=" Integer ","
+		     "cues" "=" [Integer] "}" ;
+
+Release . ReleaseRep ::= "release" "{"
+	  	     	 "name" "=" String ","
+
+
+[]  . [String] ::= ;
+(:) . [String] ::= String ";" [String] ;
+
+[]  . [Integer] ::= ;
+(:) . [Integer] ::= Integer ";" [Integer] ;

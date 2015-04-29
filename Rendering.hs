@@ -41,6 +41,9 @@ kleft = EvKey KLeft []
 enter :: Event
 enter = EvKey KEnter []
 
+tab :: Event
+tab = chEvent '\t'
+      
 --------------------      
 -- Drawing Images --
 --------------------

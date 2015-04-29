@@ -1,0 +1,187 @@
+module BrowseDir where
+
+-- TODO: filter directory result list so that only music
+--       files and directories that contain music files are displayed. (maybe)   
+
+-- TODO: prefix matching on result list (with search string) (should the
+--       search string be absolute and respond to directory changes?)
+
+-- TODO: Scrolling search string, scrolling results box. (better)
+         
+import Screen
+import MusicTypes
+import Rendering
+import Graphics.Vty       
+import System.Directory
+import System.FilePath
+import Control.Monad (filterM)
+       
+import Data.List.Zipper
+import Data.List.Split (wordsBy)
+import Data.List (intersperse, isPrefixOf)
+import Data.Char (toLower)
+
+       
+----------------------------------       
+-- The Track Importation Screen --       
+----------------------------------
+
+-- we want to be able to add directories. Thus,
+-- a directory browser is required.
+  
+dirBrowseSetup :: IO DirState
+dirBrowseSetup = do
+    home <- getHomeDirectory
+    setCurrentDirectory home
+    results <- contents home
+    return (home,results)
+
+directoryBrowser :: Screen DirState
+directoryBrowser = Screen { renderer = renderDirectories
+                          , eventMap = directoryEventMap }
+
+renderDirectories :: DirState -> Picture               
+renderDirectories (a,z) = picForImage $ (box (img a)) <-> (renderResults z)
+
+-- fow now let's have the whole thing scroll. Check out
+-- http://okmij.org/ftp/continuations/index.html#zipper
+-- when you're bored.   
+renderResults :: Zipper String -> Image
+renderResults z = box $ resizeWidth 20 $ vlist $ toList $ within 8 withPointer
+  where
+    withPointer = replace (">>" ++ (cursor z)) z 
+
+within :: Int -> Zipper String -> Zipper String
+within n (Zip bs as) = Zip bs' as'
+  where
+    bs' = if length bs < n
+          then bs ++ (replicate (n - (length bs)) "----------------")
+          else take n bs
+    as' = if length as < n
+          then as ++ (replicate (n - (length as)) "----------------")
+          else take n as
+            
+            
+windowSize :: Int
+windowSize = 10 -- say 10 for now
+               
+directoryEventMap vty = toMap $ [ (ctrl (chEvent 'q') , Terminate)
+                                , (chEvent '?'        , displayHelp importHelp)
+                                , (ctrl (chEvent 'n') , cursorDown)
+                                , (ctrl (chEvent 'p') , cursorUp)
+                                , (up                 , cursorUp)
+                                , (down               , cursorDown)
+                                , (tab                , followCursor)
+                                , (kright             , followCursor)
+                                , (enter              , followCursor)
+                                , (meta backspace     , toParentDir)
+                                , (kleft              , toParentDir)
+                               {- , (chEvent '/'        , dirSepChar)
+                                , (backspace          , delSearchChar) -}
+                                ] -- ++ dirCharEvents
+
+toParentDir = Update $ modifySearch (takeDirectory . fst)
+
+followCursor = Update $ modifySearch $ \(a,z) -> a </> takeFileName (cursor z)
+            
+-- updates the state by applying the supplied function to the search string    
+modifySearch :: (DirState -> String) -> DirState -> IO DirState
+modifySearch f (a,z) = do
+             let pth = f (a,z)
+             ok <- isOKDirectory pth
+             case ok of
+               False -> return (a,z)
+               True  -> do
+                     newpath <- canonicalizePath pth
+                     setCurrentDirectory newpath
+                     results <- contents newpath
+                     return (newpath , results)
+            
+-- only call on directories that you know exist, and know are readSearchable.
+contents :: FilePath -> IO (Zipper FilePath)
+contents path = do
+         things <- getDirectoryContents path
+         okThings <- filterM isOKThing things  
+         return $ fromList okThings
+
+
+cursorUp = Update (apply (\(a,b) -> (a, left b)))                  
+
+cursorDown = Update (apply (\(a,b) -> (a, rightButOne b)))                  
+  where rightButOne :: Zipper a -> Zipper a
+        rightButOne (Zip [] []) = Zip [] []            
+        rightButOne (Zip xs [x]) = Zip xs [x]
+        rightButOne xs = right xs            
+           
+type DirState = (String,Zipper String)
+
+----------------------------         
+-- File Permission Things --
+----------------------------            
+         
+isOKThing :: FilePath -> IO Bool
+isOKThing path = do
+                 dir <- isOKDirectory path
+                 file <- isOKFile path
+                 return (dir || file)
+                       
+isReadSearchable :: FilePath -> IO Bool
+isReadSearchable path = do
+                 perms <- getPermissions path
+                 return (readable perms && searchable perms)
+
+isReadable :: FilePath -> IO Bool
+isReadable path = do
+           perms <- getPermissions path
+           return (readable perms)
+                 
+isOKFile :: FilePath -> IO Bool
+isOKFile path = do
+            exists <- doesFileExist path
+            case exists of
+              False -> return False
+              True  -> isReadable path
+         
+isOKDirectory :: FilePath -> IO Bool
+isOKDirectory path = do
+              exists <- doesDirectoryExist path
+              case exists of
+                False -> return False
+                True  -> isReadSearchable path
+                       
+
+{-matchStr :: (String,Zipper String) -> (String,Zipper String)
+matchStr (a,z) = (a , fromList $ filter (\x -> isPrefixOf (map toLower local) (map toLower x)) $ toList z)
+  where
+    local = if (last a) == '/' then "" else last (wordsBy (\x -> x == '/') a)
+         
+dirCharEvents = map toEventPair $ allowedDirChars
+  where
+    toEventPair ch = (chEvent ch , Update (\(str,z) -> return $ matchStr (str ++ [ch],z)))
+
+allowedDirChars = ['A'..'Z'] ++ ['a'..'z'] ++ ['!','-','@',' '] -- plus more! -}
+
+----------------------------                
+-- Contextual Help Screen --
+----------------------------                
+   
+importHelp :: Image
+importHelp = vlist [ "Import screen help page. Type ? to return to the import screen"
+                   , ""
+                   , "Search Directory Manipulation:"
+                   , ""
+                   , "Result List Manipulation:"
+                   , ""
+                   , "  C-n / ↑          - focus next result"
+                   , "  C-p / ↓          - focus previous result"
+                   , "  tab / → / enter  - look at focused directory"
+                   , "  M-backspace / ←  - look at parent directory" 
+                   , ""
+                   , "Other Commands:"
+                   , "  ?    - show this help page"
+                   , "  C-q  - quit to the splash screen" ] 
+
+
+
+     
+                  

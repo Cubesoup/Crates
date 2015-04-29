@@ -1,0 +1,11 @@
+import Graphics.Vty
+import Rendering
+       
+main = do
+     config <- standardIOConfig
+     vty <- mkVty config
+     main' vty
+
+main' = do
+      ev <- nextEvent vty
+      putStrn 

@@ -5,23 +5,16 @@ module Testbed where
 import Graphics.Vty
 import Screen
 import Rendering       
-import BrowseDir
-
-main = do  config <- standardIOConfig
-           vty <- mkVty config
-           runScreen splashScreen vty ()
-           shutdown vty
-
+import Import
        
-main' vty  = do
-           ev <- nextEvent vty
-           case ev of
-                EvKey KEsc [] -> shutdown vty
-                x  -> do update vty (picForImage $ img $ (show x))
-                         ignore <- nextEvent vty
-                         update vty $ picForImage $ img "waiting"
-                         main' vty
-                
+main = do
+     config <- standardIOConfig
+     vty <- mkVty config
+     ev <- nextEvent vty
+     main
+       
+
+     
 -----------------------       
 -- The Splash Screen --
 -----------------------   
@@ -31,10 +24,14 @@ splashScreen = Screen { renderer = (\_ -> picForImage splashImage)
                       , eventMap = splashEventMap }
 
 splashEventMap vty = toMap [ (ctrl (chEvent 'q') , Terminate)
-                           , (ctrl (chEvent 'o') , Transition { before = (\_ -> dirBrowseSetup)
+{-                           , (ctrl (chEvent 'm') , Transition { before = (\_ -> importSetup)
                                                               , after  = (\a b -> return ())
-                                                              , subScreen = directoryBrowser })
-                           , (ctrl (chEvent 's') , Transition { before = (\_ -> return "")
+                                                              , subScreen = directoryBrowser }) -}
+                           , (ctrl (chEvent 'm') , Transition { before = (\_ -> return "")
+                                                              , after  = (\_ _ -> return ())
+                                                              , subScreen = searchScreen }) 
+
+                           , (ctrl (chEvent 'd') , Transition { before = (\_ -> return "")
                                                               , after  = (\_ _ -> return ())
                                                               , subScreen = searchScreen }) 
                         
