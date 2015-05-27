@@ -43,7 +43,10 @@ enter = EvKey KEnter []
 
 tab :: Event
 tab = chEvent '\t'
-      
+
+backtab :: Event -- probably shift + tab
+backtab = EvKey KBackTab []        
+    
 --------------------      
 -- Drawing Images --
 --------------------
@@ -79,31 +82,59 @@ hlist xs = img $ foldr1 (\x y -> x ++ "," ++ y) xs
 vlist :: [String] -> Image
 vlist [] = emptyImage      
 vlist xs = foldr1 (<->) $ map img xs     
-  
-box :: Image -> Image
-box stuff = top <-> (vBar <|> stuff <|> vBar) <-> bottom
+
+
+      
+boxWith :: Char -> Char -> Char -> Char -> Char -> Char -> Image -> Image
+boxWith upleft upright downleft downright vert horiz stuff =
+          top <-> (vBar <|> stuff <|> vBar) <-> bottom
     where width  = imageWidth stuff
           height = imageHeight stuff
-          hBar   = (img $ take width (repeat boxHoriz))
-          vBar   = (vertCat $ map img $ take height (repeat boxVert))
-          top    = (img boxUpLeft) <|> hBar <|> (img boxUpRight)
-          bottom = (img boxDownLeft) <|> hBar <|> (img boxDownRight)
+          hBar   = (img $ take width (repeat horiz))
+          vBar   = (vertCat $ map img $ take height (repeat vert))
+          top    = (img upleft) <|> hBar <|> (img upright)
+          bottom = (img downleft) <|> hBar <|> (img downright)
+
+box :: Image -> Image
+box = boxWith boxUpLeft boxUpRight boxDownLeft boxDownRight boxVert boxHoriz
+
+boldBox :: Image -> Image
+boldBox = boxWith boldBoxUpLeft boldBoxUpRight boldBoxDownLeft boldBoxDownRight
+                  boldBoxVert boldBoxHoriz
 
 boxHoriz :: Char
 boxHoriz = '─'
 
+boldBoxHoriz :: Char
+boldBoxHoriz = '━'
+         
 boxVert :: Char
 boxVert = '│'
+
+boldBoxVert :: Char
+boldBoxVert = '┃'
 
 boxUpLeft :: Char
 boxUpLeft = '┌'
 
+boldBoxUpLeft :: Char
+boldBoxUpLeft = '┏'              
+
 boxUpRight :: Char
 boxUpRight = '┐'
+
+boldBoxUpRight :: Char
+boldBoxUpRight = '┓'
 
 boxDownLeft :: Char
 boxDownLeft = '└'
 
+boldBoxDownLeft :: Char
+boldBoxDownLeft = '┗'
+            
 boxDownRight :: Char
 boxDownRight = '┘'
+
+boldBoxDownRight :: Char
+boldBoxDownRight = '┛'
        

@@ -36,7 +36,7 @@ splashEventMap vty = toMap [ (ctrl (chEvent 'q') , Terminate)
                                                               , subScreen = directoryBrowser })
                            , (ctrl (chEvent 's') , Transition { before = (\_ -> return "")
                                                               , after  = (\_ _ -> return ())
-                                                              , subScreen = searchScreen }) 
+                                                              , subScreen = searchScreen })
                         
                            , ((chEvent '?')      , displayHelp splashHelp)
                            ]

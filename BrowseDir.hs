@@ -1,134 +1,185 @@
 module BrowseDir where
-
--- TODO: filter directory result list so that only music
---       files and directories that contain music files are displayed. (maybe)   
-
+       
+-- Possibility: Parameterize directoryBrowser by a filter. This one filters music, but with minimal changes
+-- could be made to filter anything. (a filter has type FilePath -> Bool).   
+       
 -- TODO: prefix matching on result list (with search string) (should the
 --       search string be absolute and respond to directory changes?)
 
--- TODO: Scrolling search string, scrolling results box. (better)
-         
+import MusicTypes (emptyCrate)         
 import Screen
 import Rendering
 import Graphics.Vty       
 import System.Directory
 import System.FilePath
 import Control.Monad (filterM)
-import Data.List.Zipper
-import Data.List.Split (wordsBy)
-import Data.List (intersperse, isPrefixOf)
+import qualified Data.List.PointedList as PL
+import Data.List (sort)
 import Data.Char (toLower)
 import qualified Data.Set as Set
+import Import       
        
-----------------------------------       
--- The Track Importation Screen --       
-----------------------------------
-
--- we want to be able to add directories. Thus,
--- a directory browser is required.
-  
-dirBrowseSetup :: IO DirState
+-- The idea here is that a user probably has access to their
+-- home directory, so this shouldn't explode.
+dirBrowseSetup :: IO DirectoryBrowserState
 dirBrowseSetup = do
     home <- getHomeDirectory
     setCurrentDirectory home
-    results <- contents home
-    return (home,results)
+    folderDisp <- contents home
+    return $ DS { folder = folderDisp
+                , path = home }
+    
 
-directoryBrowser :: Screen DirState
-directoryBrowser = Screen { renderer = renderDirectories
+directoryBrowser :: Screen DirectoryBrowserState
+directoryBrowser = Screen { renderer = renderBrowserState
                           , eventMap = directoryEventMap }
 
-renderDirectories :: DirState -> Picture               
-renderDirectories (a,z) = picForImage $ (box (img a)) <-> (renderResults z)
 
--- fow now let's have the whole thing scroll. Check out
--- http://okmij.org/ftp/continuations/index.html#zipper
--- when you're bored.   
-renderResults :: Zipper String -> Image
-renderResults z = box $ resizeWidth 20 $ vlist $ toList $ within 8 withPointer
-  where
-    withPointer = replace (">>" ++ (cursor z)) z 
+focusApply :: (a -> a) -> PL.PointedList a -> PL.PointedList a
+focusApply f pl = PL.replace (f (PL._focus pl)) pl           
 
-within :: Int -> Zipper String -> Zipper String
-within n (Zip bs as) = Zip bs' as'
-  where
-    bs' = if length bs < n
-          then bs ++ (replicate (n - (length bs)) "----------------")
-          else take n bs
-    as' = if length as < n
-          then as ++ (replicate (n - (length as)) "----------------")
-          else take n as
-            
-            
-windowSize :: Int
-windowSize = 10 -- say 10 for now
-               
 directoryEventMap vty = toMap $ [ (ctrl (chEvent 'q') , Terminate)
                                 , (chEvent '?'        , displayHelp importHelp)
-                                , (ctrl (chEvent 'n') , cursorDown)
-                                , (ctrl (chEvent 'p') , cursorUp)
-                                , (up                 , cursorUp)
-                                , (down               , cursorDown)
-                                , (tab                , followCursor)
-                                , (kright             , followCursor)
-                                , (enter              , followCursor)
-                                , (meta backspace     , toParentDir)
-                                , (kleft              , toParentDir)
-                               {- , (chEvent '/'        , dirSepChar)
+                                , (ctrl (chEvent 'n') , Update (apply cursorDown))
+                                , (ctrl (chEvent 'p') , Update (apply cursorUp))
+                                , (up                 , Update (apply cursorUp))
+                                , (down               , Update (apply cursorDown))
+                                , (tab                , Update followCursor)
+                                , (kright             , Update followCursor)
+                                , (enter              , Update followCursor)
+                                , (meta backspace     , Update toParentDir)
+                                , (kleft              , Update toParentDir)
+                                , (backtab            , Update toParentDir)
+                                , (ctrl (chEvent 'g') , Transition { before = toImportState
+                                                                   , after = (\x _ -> return x)
+                                                                   , subScreen = importTrack emptyCrate })
+                                {- , (ctrl (chEvent 'a') , importCursor)
+                                , (chEvent '/'        , dirSepChar)
                                 , (backspace          , delSearchChar) -}
                                 ] -- ++ dirCharEvents
 
-toParentDir = Update $ modifySearch (takeDirectory . fst)
+toImportState :: DirectoryBrowserState -> IO TrackImportState
+toImportState dbs = setupTrackImport $ (path dbs) </> takeFileName (PL._focus (folderContents (folder dbs)))
+                  
+toParentDir :: DirectoryBrowserState -> IO DirectoryBrowserState
+toParentDir dbs = do
+            let newPath = takeDirectory (path dbs)
+            newFolder <- contents newPath
+            if newFolder == Empty
+              then return dbs -- don't go to unuseable parent folders!
+              else return $ DS { folder = newFolder
+                               , path = newPath }
 
-followCursor = Update $ modifySearch $ \(a,z) -> a </> takeFileName (cursor z)
-            
--- updates the state by applying the supplied function to the search string    
-modifySearch :: (DirState -> String) -> DirState -> IO DirState
-modifySearch f (a,z) = do
-             let pth = f (a,z)
-             ok <- isOKDirectory pth
-             case ok of
-               False -> return (a,z)
-               True  -> do
-                     newpath <- canonicalizePath pth
-                     setCurrentDirectory newpath
-                     results <- contents newpath
-                     return (newpath , results)
-            
+followCursor :: DirectoryBrowserState -> IO DirectoryBrowserState
+followCursor dbs = do
+          if (folder dbs) == Empty then return dbs
+            else do
+             let newPath = (path dbs) </> takeFileName (PL._focus (folderContents (folder dbs)))
+             notADirectory <- doesFileExist newPath
+             if notADirectory then return dbs
+               else do
+                 newFolder <- contents newPath
+                 return $ DS { folder = newFolder
+                             , path = newPath }
+
+cursorDown :: DirectoryBrowserState -> DirectoryBrowserState
+cursorDown dbs = dbs { folder = moveFocusDown (folder dbs) }
+
+cursorUp :: DirectoryBrowserState -> DirectoryBrowserState
+cursorUp dbs = dbs { folder = moveFocusUp (folder dbs) }
+                     
+             
+-----------------------------     
+-- Directory Browser State --
+-----------------------------
+
+renderBrowserState :: DirectoryBrowserState -> Picture
+renderBrowserState dbs = picForImage $
+                           img (path dbs) <->
+                           renderFolder (folder dbs)
+
+renderFolder :: FolderDisplay -> Image
+renderFolder Empty = box $ resize (windowWidth) (windowHeight) $ img "No Music Here!"
+renderFolder fd = box $ resize (windowWidth) (windowHeight) $ vlist flatList
+  where
+    flatList = take windowHeight $ drop (displayCounter fd) $ (toList (focusApply (\x -> ">" ++ x) (fmap takeFileName (folderContents fd))))
+
+        
+data DirectoryBrowserState = DS { folder :: FolderDisplay
+                                , path :: String }
+         
 -- only call on directories that you know exist, and know are readSearchable.
-contents :: FilePath -> IO (Zipper FilePath)
+contents :: FilePath -> IO FolderDisplay
 contents path = do
-         things <- getDirectoryContents path
-         okThings <- filterM isOKThing things  
-         return $ fromList okThings
+         localThings <- getDirectoryContents path
+         let things = sort $ map (\x -> path </> x) localThings
+         okThings <- filterM isOKThing things
+         case okThings of
+             [] -> return Empty
+             xs -> return $ FD { folderContents = (\(Just x) -> x) $ PL.fromList okThings
+                               , displayCounter = 0 }         
 
+-- a pointedList is a lot like a zipper. the displayCounter allows
+-- more sophisticated scrolling behaviour. the displayCounter should
+-- always contain the index of the first element in the display
+-- window.  
+data FolderDisplay = Empty 
+                   | FD { folderContents :: PL.PointedList String
+                        , displayCounter :: Int -- the index of the first item in the display window.
+                        }
+     deriving (Eq, Show)
 
-cursorUp = Update (apply (\(a,b) -> (a, left b)))                  
+topBuffer :: Int
+topBuffer = 2
 
-cursorDown = Update (apply (\(a,b) -> (a, rightButOne b)))                  
-  where rightButOne :: Zipper a -> Zipper a
-        rightButOne (Zip [] []) = Zip [] []            
-        rightButOne (Zip xs [x]) = Zip xs [x]
-        rightButOne xs = right xs            
-           
-type DirState = (String,Zipper String)
+bottomBuffer :: Int
+bottomBuffer = 3
+
+windowHeight :: Int
+windowHeight = 10
+
+windowWidth :: Int
+windowWidth = 20            
+
+moveFocusDown :: FolderDisplay -> FolderDisplay
+moveFocusDown Empty = Empty
+moveFocusDown fd = case (PL.next (folderContents fd)) of
+                     Nothing -> fd                   -- if at end of list do nothing
+                     Just pl -> FD { folderContents = pl
+                                   , displayCounter = if (displayCounter fd) + windowHeight - bottomBuffer < (PL.index pl)
+                                                         then (displayCounter fd) + 1
+                                                         else displayCounter fd
+                                   }
+              
+moveFocusUp :: FolderDisplay -> FolderDisplay              
+moveFocusUp Empty = Empty
+moveFocusUp fd = case (PL.previous (folderContents fd)) of
+                   Nothing -> fd
+                   Just pl -> FD { folderContents = pl
+                                 , displayCounter = if (PL.index pl) < ((displayCounter fd) + topBuffer)
+                                                        then (displayCounter fd) - 1
+                                                        else displayCounter fd
+                                 }
 
 ------------------------
 -- Detect Music Files --
 ------------------------
 
+-- a directory contains music if it is an OK directory and at least one thing in it is music.
+-- This won't really work unless it's recursive. Probably best not to do it yet.   
 containsMusic :: FilePath -> IO Bool
 containsMusic path = do
     ok <- isOKDirectory path
     case ok of
       False -> return False
       True  -> do
-          things <- contents path
-          case (filter isMusic (toList things)) of
+          things <- getDirectoryContents path
+          things' <- filterM isOKThing (filter isMusic things)
+          case things' of
             [] -> return False
             _  -> return True
     
--- how crazy do we want to be here?
+-- how crazy do we want to be here? video formats? probably just what alsaplayer does.
 musicExtensions :: Set.Set String
 musicExtensions = Set.fromList 
                 [ ".flac"
@@ -149,7 +200,13 @@ isOKThing :: FilePath -> IO Bool
 isOKThing path = do
                  dir <- isOKDirectory path
                  file <- isOKFile path
-                 return (dir || file)
+                 let musicFile = file && (isMusic path) 
+                 return $ case takeFileName path of
+                   "."   -> False
+                   ".."  -> False
+                   other -> if (head other) == '.'
+                              then False
+                              else (dir || musicFile)
                        
 isReadSearchable :: FilePath -> IO Bool
 isReadSearchable path = do
@@ -190,7 +247,7 @@ allowedDirChars = ['A'..'Z'] ++ ['a'..'z'] ++ ['!','-','@',' '] -- plus more! -}
 ----------------------------                
 -- Contextual Help Screen --
 ----------------------------                
-   
+
 importHelp :: Image
 importHelp = vlist [ "Import screen help page. Type ? to return to the import screen"
                    , ""
@@ -198,10 +255,10 @@ importHelp = vlist [ "Import screen help page. Type ? to return to the import sc
                    , ""
                    , "Result List Manipulation:"
                    , ""
-                   , "  C-n / ↑          - focus next result"
-                   , "  C-p / ↓          - focus previous result"
-                   , "  tab / → / enter  - look at focused directory"
-                   , "  M-backspace / ←  - look at parent directory" 
+                   , "  C-n / ↑                   - focus next result"
+                   , "  C-p / ↓                   - focus previous result"
+                   , "  tab / → / enter           - look at focused directory"
+                   , "  M-backspace / ← / backtab - look at parent directory" 
                    , ""
                    , "Other Commands:"
                    , "  ?    - show this help page"

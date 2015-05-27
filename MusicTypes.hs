@@ -22,6 +22,15 @@ data Track = Track { artists  :: [String]
                    , cues     :: [Int]
                    , genre    :: String }       
 
+emptyTrack :: FilePath -> Track
+emptyTrack path = Track { artists = []
+                   , title = []
+                   , location = path
+                   , bpm = 0
+                   , duration = 0
+                   , cues = []
+                   , genre = [] }
+     
 data Release = Release { tracks :: [(String,[String])] -- track name and artists in album order
                        , name   :: String
                        , year   :: Int
@@ -34,6 +43,8 @@ data Crate = Crate { trackIndex   :: Trie Track
                    , genreIndex   :: Trie String
                    , releaseLookupTable :: Trie [Release] }
 
+emptyCrate = buildCrate [] []
+     
 -----------------------------     
 -- Call This After Parsing --
 -----------------------------   
