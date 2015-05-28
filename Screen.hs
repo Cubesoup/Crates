@@ -87,5 +87,5 @@ helpScreen helpimg = Screen { renderer = (\_ -> picForImage helpimg)
                           , eventMap = helpScreenMap }
 
 -- default quit key is '?', could probably parameterize but let's sit on it.           
-helpScreenMap vty = toMap [ (chEvent '?' , Terminate)]             
+helpScreenMap vty = toMap [ (escape , Terminate)]             
       

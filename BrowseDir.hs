@@ -38,7 +38,7 @@ directoryBrowser = Screen { renderer = renderBrowserState
 focusApply :: (a -> a) -> PL.PointedList a -> PL.PointedList a
 focusApply f pl = PL.replace (f (PL._focus pl)) pl           
 
-directoryEventMap vty = toMap $ [ (ctrl (chEvent 'q') , Terminate)
+directoryEventMap vty = toMap $ [ (escape             , Terminate)
                                 , (chEvent '?'        , displayHelp importHelp)
                                 , (ctrl (chEvent 'n') , Update (apply cursorDown))
                                 , (ctrl (chEvent 'p') , Update (apply cursorUp))

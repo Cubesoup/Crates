@@ -46,7 +46,10 @@ tab = chEvent '\t'
 
 backtab :: Event -- probably shift + tab
 backtab = EvKey KBackTab []        
-    
+
+escape :: Event
+escape = EvKey KEsc []       
+        
 --------------------      
 -- Drawing Images --
 --------------------

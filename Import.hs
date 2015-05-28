@@ -1,5 +1,6 @@
 module Import where
 
+import Prelude hiding (length)       
 import MusicTypes
 import Screen
 import Rendering
@@ -12,10 +13,6 @@ import Data.List (intersperse)
 import qualified Data.List.PointedList.Circular as C
        
 -- Instead of passing around a crate, we parameterize the import screen by one.
-
--- two screens, importRelease, and
--- importTrack. importTrack is more
--- important.   
 
 -- TODO: Make it actually add the track to the crate with C-s or something.    
    
@@ -37,7 +34,7 @@ importTrack crate = Screen { renderer = renderTrackImportState
 
     
 trackImportEventMap crate vty =
-    toMap $ [ (ctrl (chEvent 'q') , Terminate)
+    toMap $ [ (escape             , Terminate)
             , (tab                , Update (apply focusDown))
             , (backtab            , Update (apply focusUp))
             , (up                 , Update (apply focusUp))
@@ -45,19 +42,16 @@ trackImportEventMap crate vty =
             , (kright             , Update (apply cursorRight))
             , (kleft              , Update (apply cursorLeft))
             , (backspace          , Update (apply deleteAtCursor))
+            , (ctrl (chEvent 'a') , Update (apply toFieldStart))
+            , (ctrl (chEvent 'e') , Update (apply toFieldEnd))
+            , (ctrl (chEvent 'k') , Update (apply deleteToRight))
+            , (ctrl (chEvent 'f') , Update (apply cursorRight))
+            , (ctrl (chEvent 'b') , Update (apply cursorLeft))
+            , (ctrl (chEvent 'p') , Update (apply focusUp))
+            , (ctrl (chEvent 'n') , Update (apply focusDown))
             ] ++ charInsertEvents
 
-
-deleteAtCursor :: TrackImportState -> TrackImportState
-deleteAtCursor tis = TIS { trackInfo = trackInfo tis
-                         , fields = applyToFocus
-                                      deleteFocus
-                                      (fields tis) }
-    where
-      deleteFocus :: CursorString -> CursorString
-      deleteFocus pl | (atStart pl) && (atEnd pl) = pl
-                     | (atStart pl) = (\(Just x) -> x) $ deleteRight pl
-                     | otherwise =  (\(Just x) -> x) $ deleteLeft pl
+                                      
     
 -- events to edit focused string based on keypress. need valid characters for artist names,
 -- album names, track names. Let's ignore the non-latin alphabets for now, because idfk how
@@ -83,8 +77,9 @@ insertChar ch tis = TIS { trackInfo = trackInfo tis
                                      (smartInsert ch)
                                      (fields tis) }
     where
-      smartInsert :: Char -> CursorString -> CursorString
-      smartInsert ch pl = focusRight (insertLeft ch pl)
+      smartInsert :: Char -> ScrollBox -> ScrollBox
+      smartInsert ch sb = focusRight $ sb { boxText = (insertLeft ch (boxText sb)) }
+                             
                          
 ---------------    
 -- Rendering --
@@ -95,39 +90,80 @@ renderTrackImportState tis = picForImage $
                              img (location (trackInfo tis)) <->
                              renderFields (fields tis)
 
-renderFields :: PointedList CursorString -> Image
+renderFields :: PointedList ScrollBox -> Image
 renderFields pl = box $ vertCat $ toList $ 
                     replace (boldBoxed (_focus pl)) (fmap toBoxed pl)
     where
-      toBoxed :: CursorString -> Image
+      toBoxed :: ScrollBox -> Image
       toBoxed s = box $ doThings s
-      boldBoxed :: CursorString -> Image
-      boldBoxed s = boldBox $ doThings $ indicateCursor s
-      doThings :: CursorString -> Image
-      doThings s = resize fieldWidth 1 $ img $ toList s
+      boldBoxed :: ScrollBox -> Image
+      boldBoxed s = boldBox $ doThings $ s { boxText = indicateCursor (boxText s)}
+      doThings :: ScrollBox -> Image
+      doThings s = resize fieldBoxWidth 1 $ img $
+                     drop (scrollCounter s) (toList (boxText s))
 
--- The cursor doesn't act quite right...
--- it has one possible position for each character in the string,
--- but we need it to have n+1...   
 indicateCursor :: CursorString -> CursorString
 indicateCursor pl = applyToFocus (\x -> '_') pl               
     
 toList :: PointedList a -> [a]
 toList pl = reverse (_reversedPrefix pl) ++ [(_focus pl)] ++ (_suffix pl)
     
-fieldWidth :: Int
-fieldWidth = 20           
    
-
 -------------------------------------
 -- State and State Transformations --
 -------------------------------------
 
--- a change is needed: Fields always need to have an
--- imaginary blank character at the end to accomodate the
--- cursor (which means for editing too!). Thus, fields can
--- never be empty.   
-        
+fieldBoxWidth :: Int
+fieldBoxWidth = 20           
+
+deleteToRight :: TrackImportState -> TrackImportState
+deleteToRight tis = TIS { trackInfo = trackInfo tis
+                        , fields = applyToFocus focusDropRight (fields tis) }
+
+focusDropRight :: ScrollBox -> ScrollBox
+focusDropRight sb = sb { boxText = dropSuffix (boxText sb) }
+              
+dropSuffix :: PointedList a -> PointedList a
+dropSuffix pl = PointedList (_reversedPrefix pl) (_focus pl) []
+          
+               
+toFieldEnd :: TrackImportState -> TrackImportState    
+toFieldEnd tis = TIS { trackInfo = trackInfo tis
+                     , fields = applyToFocus toFocusEnd (fields tis) }
+
+toFocusEnd :: ScrollBox -> ScrollBox
+toFocusEnd sb = SB { boxText = (\(Just x) -> x) $ moveTo ((length (boxText sb)) - 1)
+                                                         (boxText sb)
+                   , scrollCounter = if ((length (boxText sb)) - fieldBoxWidth) < 0
+                                       then 0
+                                       else (length (boxText sb)) - fieldBoxWidth }
+           
+toFieldStart :: TrackImportState -> TrackImportState
+toFieldStart tis = TIS { trackInfo = trackInfo tis
+                       , fields = applyToFocus toFocusStart (fields tis) }
+
+toFocusStart :: ScrollBox -> ScrollBox
+toFocusStart sb = SB { boxText = (\(Just x) -> x) $ moveTo 0 (boxText sb)
+                     , scrollCounter = 0 }
+    
+deleteAtCursor :: TrackImportState -> TrackImportState
+deleteAtCursor tis = TIS { trackInfo = trackInfo tis
+                         , fields = applyToFocus
+                                      updateBox
+                                      (fields tis) }
+    where
+      deleteFocus :: CursorString -> CursorString
+      deleteFocus pl | (atStart pl) && (atEnd pl) = pl
+                     | (atStart pl) = (\(Just x) -> x) $ deleteRight pl
+                     | otherwise =  (\(Just x) -> x) $ deleteLeft pl
+      updateBox :: ScrollBox -> ScrollBox
+      updateBox sb = SB { boxText = deleteFocus (boxText sb)
+                        , scrollCounter =
+                            if index (deleteFocus (boxText sb)) < (scrollCounter sb)
+                              then (scrollCounter sb) - 1
+                              else (scrollCounter sb) }
+
+   
 applyToFocus :: (a -> a) -> PointedList a -> PointedList a
 applyToFocus f pl = replace (f (_focus pl)) pl
 
@@ -137,9 +173,17 @@ type CursorString = PointedList Char
 toCursorString :: String -> CursorString
 toCursorString s = unsafeFromList $ s ++ [' ']
 
-fromCursorString :: CursorString -> String
+fromCursorString :: CursorString  -> String
 fromCursorString = init . toList                  
-     
+
+toScrollBox :: String -> ScrollBox
+toScrollBox s = SB { boxText = toCursorString s
+                   , scrollCounter = 0 }
+
+fromScrollBox :: ScrollBox -> String
+fromScrollBox b = fromCursorString (boxText b)              
+
+
 cursorRight :: TrackImportState -> TrackImportState
 cursorRight tis = TIS { trackInfo = trackInfo tis
                       , fields = applyToFocus focusRight (fields tis) }
@@ -148,19 +192,27 @@ cursorLeft :: TrackImportState -> TrackImportState
 cursorLeft tis = TIS { trackInfo = trackInfo tis
                      , fields = applyToFocus focusLeft (fields tis) }
            
-focusRight :: CursorString -> CursorString
-focusRight pl = case next pl of
-                  Nothing -> pl
-                  Just nl -> nl
+focusRight :: ScrollBox -> ScrollBox
+focusRight sb = case next (boxText sb) of
+                  Nothing -> sb
+                  Just nl -> SB { boxText = nl
+                                , scrollCounter = if ((index nl) - (scrollCounter sb)) >= fieldBoxWidth
+                     then (scrollCounter sb) + 1
+                     else (scrollCounter sb)
+          }
 
-focusLeft :: CursorString -> CursorString
-focusLeft pl = case previous pl of
-                 Nothing -> pl
-                 Just nl -> nl
+focusLeft :: ScrollBox -> ScrollBox
+focusLeft sb = case previous (boxText sb) of
+                 Nothing -> sb
+                 Just nl -> SB { boxText = nl
+                               , scrollCounter = if ((index nl) - (scrollCounter sb)) < 0
+                     then (scrollCounter sb) - 1
+                     else (scrollCounter sb)
+          }
      
 -- the string in focus has a cursor, so CursorString        
-generateFields :: Track -> PointedList CursorString
-generateFields t = unsafeFromList $ map toCursorString
+generateFields :: Track -> PointedList ScrollBox
+generateFields t = unsafeFromList $ map toScrollBox
                      [ title t
                      , concat (intersperse " & " (artists t))
                      , genre t ]               
@@ -177,8 +229,11 @@ focusDown tis = TIS { trackInfo = trackInfo tis
                     , fields = C.next (fields tis) }
 
 data TrackImportState = TIS { trackInfo :: Track
-                            , fields :: PointedList CursorString }
-        
+                            , fields :: PointedList ScrollBox }
+
+data ScrollBox = SB { boxText :: CursorString
+                    , scrollCounter :: Int }
+
 -----------------------------------------------
 -- Functions for inferring track information --
 -----------------------------------------------   

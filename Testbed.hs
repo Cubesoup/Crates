@@ -30,7 +30,7 @@ splashScreen :: Screen ()
 splashScreen = Screen { renderer = (\_ -> picForImage splashImage)
                       , eventMap = splashEventMap }
 
-splashEventMap vty = toMap [ (ctrl (chEvent 'q') , Terminate)
+splashEventMap vty = toMap [ (escape             , Terminate)
                            , (ctrl (chEvent 'o') , Transition { before = (\_ -> dirBrowseSetup)
                                                               , after  = (\a b -> return ())
                                                               , subScreen = directoryBrowser })
@@ -69,7 +69,7 @@ searchScreen = Screen { renderer = (\text -> picForImage (box (resize 30 1 (img 
                       , eventMap = searchEventMap }                                      -- bound the length of the search string? NO
                                                                                          -- need a CURSOR -- Vty.Output has cursor things.
 
-searchEventMap vty = toMap $ [ (ctrl (chEvent 'q') , Terminate)
+searchEventMap vty = toMap $ [ (escape             , Terminate)
                              , (chEvent '?'        , displayHelp searchHelp)
                              , (backspace          , Update (apply safeInit))
                              , (ctrl (chEvent 'k') , Update (\_ -> return ""))

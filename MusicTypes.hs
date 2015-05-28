@@ -17,21 +17,33 @@ import Data.Char (toLower)
 data Track = Track { artists  :: [String]
                    , title    :: String
                    , location :: FilePath
-                   , bpm      :: Int   -- to simplify things. Set to whatever if no bpm info available.
-                   , duration :: Int   -- in seconds
+                   , duration :: Int   
                    , cues     :: [Int]
-                   , genre    :: String }       
+                   , genre    :: String
+                   , comment  :: String
+                   , releaseYear :: Int
+                   , trackNum :: Int
+                   , bitRate  :: Int
+                   , channels :: Int
+                   , sampleRate :: Int }
+                   
 
 emptyTrack :: FilePath -> Track
 emptyTrack path = Track { artists = []
                    , title = []
                    , location = path
-                   , bpm = 0
                    , duration = 0
                    , cues = []
-                   , genre = [] }
+                   , genre = []
+                   , comment = ""
+                   , releaseYear = 0000
+                   , trackNum = 0
+                   , bitRate = 0
+                   , channels = 0
+                   , sampleRate = 0 }
+           
      
-data Release = Release { tracks :: [(String,[String])] -- track name and artists in album order
+data Release = Release { tracks :: [(String,[String])] 
                        , name   :: String
                        , year   :: Int
                        , label  :: String }
@@ -114,9 +126,6 @@ filterArtist a = (\t -> (map toLower a) `elem` (map (map toLower) (artists t)))
 
 filterGenre :: String -> TrackFilter
 filterGenre g = (\t -> (map toLower g) == (map toLower (genre t)))
-
-filterBPM :: Int -> Int -> TrackFilter
-filterBPM high low = (\t -> ((bpm t) <= high) && ((bpm t) >= low))
 
 type ReleaseFilter = Release -> Bool
 
