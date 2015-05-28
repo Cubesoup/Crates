@@ -32,8 +32,8 @@ data Screen a = forall b . Screen { renderer :: a -> Picture -- worry about resi
 data Transition a b = Terminate
                     | Update (a -> IO a)
                     | forall b . Transition { subScreen :: Screen b
-                                           , before    :: a -> IO b
-                                           , after     :: a -> b -> IO a }
+                                             , before    :: a -> IO b
+                                             , after     :: a -> b -> IO a }
 
 
 -- This is the "Driver" (it "drives" a screen in the sense that it glues it all together)
